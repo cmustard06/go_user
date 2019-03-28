@@ -85,7 +85,7 @@ func (mgr *SessionManager)StartSession(w http.ResponseWriter, r *http.Request) s
 		Value:newSessionId,
 		Path:"/",
 		HttpOnly:true,
-		MaxAge:int(mgr.MaxLifeTime),
+		MaxAge:int(mgr.MaxLifeTime), //客户端直接过期了，与服务器端不停同步
 	}
 	http.SetCookie(w, &cookie)
 	return newSessionId
@@ -114,7 +114,7 @@ func (mgr *SessionManager)EndSession(w http.ResponseWriter,r *http.Request){
 	}
 }
 
-//服务器端删除无效的sessionid
+//服务器端删除无效的sessionid，相当于退出登录状态
 func (mgr *SessionManager)DeleteSession(sessionId string){
 	mgr.Lock.Lock()
 	defer mgr.Lock.Unlock()
@@ -134,7 +134,7 @@ func (mgr *SessionManager)GetSessionVal(sessionId string, key interface{})(inter
 	return nil,false
 }
 
-//设置session的值
+//设置session中的值，用来确定当前状态
 func(mgr *SessionManager)SetSessionVal(sessionId string, key interface{}, value interface{})bool{
 	mgr.Lock.Lock()
 	defer mgr.Lock.Unlock()
@@ -158,7 +158,7 @@ func (mgr *SessionManager)GetSessionIDList() []string{
 	return sessionIdList
 }
 
-//session检测
+//session检测，每一次请求都应该调用该函数对session进行更新
 func (mgr *SessionManager)CheckSession(w http.ResponseWriter,r *http.Request) string {
 	var cookie,err = r.Cookie(mgr.CookieName)
 	if cookie == nil||err!=nil{
@@ -170,6 +170,15 @@ func (mgr *SessionManager)CheckSession(w http.ResponseWriter,r *http.Request) st
 	sessionId := cookie.Value
 	if session,ok :=mgr.Sessions[sessionId];ok{
 		session.LastTimeAccessed = time.Now()
+		//对客户端的cookie设置过期时间
+		cookie := http.Cookie{
+			Name:mgr.CookieName,
+			Value:sessionId,
+			Path:"/",
+			HttpOnly:true,
+			MaxAge:int(mgr.MaxLifeTime),
+		}
+		http.SetCookie(w, &cookie)
 		return sessionId
 	}
 	return ""
